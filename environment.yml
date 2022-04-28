@@ -1,0 +1,10 @@
+name: 
+dependencies:
+- python
+- numpy
+- jupyter
+- psycopg2
+- pandas
+- boto3
+- conda-forge::ipython-sql
+- conda-forge::matplotlib
