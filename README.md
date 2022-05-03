@@ -7,9 +7,9 @@ The ETL uses conda environments with the latest python version 3.10.
 * Create a Redshift Cluster 
 * Setup a Database and take note of the Database name, user, password and port
 * Make sure the Cluster's VPC is accessible from the computer running this
-* Record cluster host and DB params at dwh.cfg at the [CLUSTER] section
+* Record cluster host and DB params at [dwh.cfg](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/dwh.cfg) at the [CLUSTER] section
 
-* Create a Role that has access to read from S3 'aws:policy/AmazonS3ReadOnlyAccess' and record its ARN at dwh.cfg at the [IAM_ROLE] section
+* Create a Role that has access to read from S3 'aws:policy/AmazonS3ReadOnlyAccess' and record its ARN at [dwh.cfg](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/dwh.cfg) at the [IAM_ROLE] section
 
 * Make sure [conda environment is active](#_notescmd)
 
@@ -27,9 +27,6 @@ The ETL uses conda environments with the latest python version 3.10.
 
 ## [_notes.cmd](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/_notes.cmd)
 Contains command line snippets, most of them to manage the conda environment
-
-- [ ] conda env commands to be relative path
-- [ ] conda env to automatically execute when.... 
 
 * [Activate Conda](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/1f8411efd470df52f82025f42bf81f6bfca5f0b0/_notes.cmd#L5)
 * [Create conda environment from a yml file](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/1f8411efd470df52f82025f42bf81f6bfca5f0b0/_notes.cmd#L8)
@@ -81,10 +78,12 @@ Notebook querying the data inserted by the ETL
 
 ## Staging Table `staging_events`
 * For staging events, there is character content larger at staging_events.artist than the default varchar default length (256)
+
 ![image](https://user-images.githubusercontent.com/11904085/166483856-5a7f2bef-020f-40e2-8e8e-39d6a29755b1.png)
 
 ## Staging Table `staging_songs`
 * For staging songs, there is character content larger at staging_songs.title, staging_songs.artist_name and staging_songs.artist_location than the default varchar default length (256)
+
 ![image](https://user-images.githubusercontent.com/11904085/166484126-8e915a5f-4dd3-4168-89e5-e69c667d17ab.png)
 
 
@@ -102,10 +101,12 @@ Notebook querying the data inserted by the ETL
 ## Dimension Table `songs`
 * Songs dimension is the largest dimension
 * It has a distribution style by song_id so it can distribute across clusters along with the songplays fact table records
+
 ![image](https://user-images.githubusercontent.com/11904085/166486672-921fd462-1f16-402d-bd75-fbb079011b0c.png)
 
 ## Dimension Table `users`
 * User dimension table will be replicated in all clusters as comparatively has much less data
+
 ![image](https://user-images.githubusercontent.com/11904085/166487245-cd0904da-16e7-4176-9770-671fe09cd42f.png)
 
 ## Dimension Table  `artists`
