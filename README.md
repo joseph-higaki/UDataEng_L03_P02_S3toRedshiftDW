@@ -65,7 +65,9 @@ Notebook for testing each step of the process
 ETL processing metadata and events into the songplays datamart.
 Since we are working with a powerful database such as Redshift. We are transforming the staging tables into the facts and dimensions using INSERT - SELECT statements. This way we take advantage of the database cloud capabilities.
 ![image](https://user-images.githubusercontent.com/11904085/166488073-3c4c2d76-851b-4b66-a124-15162ba1e05e.png)
+
 ![image](https://user-images.githubusercontent.com/11904085/166488151-0400b170-c7e1-4fe1-b3ca-938a7ea84427.png) 
+
 ![image](https://user-images.githubusercontent.com/11904085/166488255-0516510e-8d15-4977-8fb7-49f03038534d.png) 
 
 ## [sql_queries.py](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/sql_queries.py)
