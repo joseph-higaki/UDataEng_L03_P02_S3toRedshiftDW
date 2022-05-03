@@ -25,87 +25,96 @@ The ETL uses conda environments with the latest python version 3.10.
     
 # File list
 
-*****************************************************************************************************
-*****************************************************************************************************
-********************************** AQUI ME QUEDÉ ****************************************************
-*****************************************************************************************************
-*****************************************************************************************************
-
-## [_notes.cmd](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/_notes.cmd)
+## [_notes.cmd](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/_notes.cmd)
 Contains command line snippets, most of them to manage the conda environment
 
 - [ ] conda env commands to be relative path
 - [ ] conda env to automatically execute when.... 
 
-* [Activate Conda](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/69ed9c05d1cd25375997a5780f0d798445c6a4ae/_notes.cmd#L5)
-* [Create conda environment from a yml file](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/69ed9c05d1cd25375997a5780f0d798445c6a4ae/_notes.cmd#L8)
-* [Activate, update, remove conda environment](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/69ed9c05d1cd25375997a5780f0d798445c6a4ae/_notes.cmd#L10-L17)
+* [Activate Conda](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/1f8411efd470df52f82025f42bf81f6bfca5f0b0/_notes.cmd#L5)
+* [Create conda environment from a yml file](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/1f8411efd470df52f82025f42bf81f6bfca5f0b0/_notes.cmd#L8)
+* [Activate, update, remove conda environment](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/1f8411efd470df52f82025f42bf81f6bfca5f0b0/_notes.cmd#L10-L17)
 
-
-## [create_tables.py](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/create_tables.py)
+## [create_tables.py](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/create_tables.py)
 Python code to execute DDL statements that initialize the sparkify database
 
-## [db_connection_config.py](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/db_connection_config.py)
-Helper class that provides a PostgreSQL connection string from a config file 
+## [aws.cfg]()
+Config file where we have the 
 
-- [ ] I would've liked this to follow a singleton pattern 😪
+    - KEY
+    - SECRET
+    - PREFERRED_REGION
 
-## [db_connection_config.yml](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/db_connection_config.yml)
-Config file 
+For the aws user (gitIgnored 😉)
 
-## [ddl.sql](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/ddl.sql)
-DDL statements that initialize the sparkify database
-
-I've created this file to get me going at the beggining, through a SQL console (DataGrip) before I placed the statements on [create_tables.py](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/create_tables.py)
+![image](https://user-images.githubusercontent.com/11904085/166481419-dd62a376-234c-4a77-913f-ffebd3042ce3.png)
 
 
-## [environment.yml](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/environment.yml)
+## [dwh.cfg](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/dwh.cfg)
+Config file where we have the:
+
+    - Redshift connection string
+    - IAM ARN Role to read from S3 buckets
+    - S3 buckets URI
+
+
+## [environment.yml](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/environment.yml)
 Environment config. Coontains the project dependencies for creating a conda environment
 
-* Needed to use python 3.8  as I couldn't make psycopg2 work with 3.9
-* I used pyyaml, spend too much time troubleshooting why previously I'd been able to use `pip install yaml` and `conda install yaml` doesn't do the trick
-* ipython-sql to be able to execute inline SQL at test.ipynb is not available from conda default channels. I discovered the [channel]::[package] syntax 😊
+## [etl_draft.ipynb](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/etl_draft.ipynb)
+Notebook for testing each step of the process
 
-## [etl.ipynb](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/etl.ipynb)
-Notebook for testing each process
+## [etl.py](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/etl.py)
+ETL processing metadata and events into the songplays datamart.
+Since we are working with a powerful database such as Redshift. We are transforming the staging tables into the facts and dimensions using INSERT - SELECT statements. This way we take advantage of the database cloud capabilities.
+![image](https://user-images.githubusercontent.com/11904085/166488073-3c4c2d76-851b-4b66-a124-15162ba1e05e.png)
+![image](https://user-images.githubusercontent.com/11904085/166488151-0400b170-c7e1-4fe1-b3ca-938a7ea84427.png) 
+![image](https://user-images.githubusercontent.com/11904085/166488255-0516510e-8d15-4977-8fb7-49f03038534d.png) 
 
-## [etl.py](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/etl.py)
-ETL processing metadata and events into the songplays datamart
+## [sql_queries.py](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/sql_queries.py)
+DDL and DML SQL statements for the ETL
 
-## [sparkifydb queries.sql](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/sparkifydb%20queries.sql)
-Scrapbook for queries that are being executed on a PostgreSQL console (DataGrip)
-
-## [sql_queries.py](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/sql_queries.py)
-SQL statements for the ETL
-
-## [test.ipynb](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/test.ipynb)
+## [test.ipynb](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/test.ipynb)
 Notebook querying the data inserted by the ETL
 
 # Database Schema 
-* I wish I could've been able to have DataGrip build an ERD from my database. I was not succesful at doing this
+
+## Staging Table `staging_events`
+* For staging events, there is character content larger at staging_events.artist than the default varchar default length (256)
+![image](https://user-images.githubusercontent.com/11904085/166483856-5a7f2bef-020f-40e2-8e8e-39d6a29755b1.png)
+
+## Staging Table `staging_songs`
+* For staging songs, there is character content larger at staging_songs.title, staging_songs.artist_name and staging_songs.artist_location than the default varchar default length (256)
+![image](https://user-images.githubusercontent.com/11904085/166484126-8e915a5f-4dd3-4168-89e5-e69c667d17ab.png)
+
 
 ## Fact Table `songplays`
 * PK `songplay_id` has an autoincrement int column 
-* Since we're working over a sample of the [million songs dataset](http://millionsongdataset.com/) most of the songs referenced at the stream event log are not at the song/artist metadata files. 
-I included he song title and artist name in the songplays facttable
-* Length at the event table is being interpreted as stream duration of the song. This would allow us to differenciate the length of the song according to the metadata vs how much odf the song was streamed. We could later answer questions like: how often this song is skipped or streamed partially.
-![image](https://user-images.githubusercontent.com/11904085/153720167-477fd2ba-0d26-4d2f-97d5-65374bf091eb.png)
+* Songplays fact table will have a distribution style by Key, having as its sort key the timestamp 
+* The distribution key will be the song id, which corresponds to the largest dimension. This way songplays along with songs records are allocated in the same cluster
+* Included the song title and artist name in the songplays facttable
 
-## Dimension Tables `users, songs, artists`
-They use a PK from the source system, which will force us to follow a SCD Type 1 for these dimensions. 
-No history, just overwrite on changes. 
-I believe it is ok for the current scope of the problem.
-![image](https://user-images.githubusercontent.com/11904085/153720185-7be954fa-4cc2-434e-abb1-e8479c4d8518.png)
+    - So that an unexisting song at the song catalog/dimension, does not impact stream metrics
+    - Avoid joins to artist or songs, just to get the artist name or song title
+
+![image](https://user-images.githubusercontent.com/11904085/166486460-cb214639-dd52-4034-b928-55fdc98affe0.png)
+
+## Dimension Table `songs`
+* Songs dimension is the largest dimension
+* It has a distribution style by song_id so it can distribute across clusters along with the songplays fact table records
+![image](https://user-images.githubusercontent.com/11904085/166486672-921fd462-1f16-402d-bd75-fbb079011b0c.png)
+
+## Dimension Table `users`
+* User dimension table will be replicated in all clusters as comparatively has much less data
+![image](https://user-images.githubusercontent.com/11904085/166487245-cd0904da-16e7-4176-9770-671fe09cd42f.png)
+
+## Dimension Table  `artists`
+* Artists dimension will be replicated in all clusters
+
+![image](https://user-images.githubusercontent.com/11904085/166487403-798d23b2-517e-4a63-9332-f3b720c6360b.png)
 
 ## Dimension Table `time` 
-Calendar dimension to be able to query/aggregate easily blocks of time.
-![image](https://user-images.githubusercontent.com/11904085/153720199-d36ca5fc-41c4-4b4e-a2b8-d16459058d7b.png)
+* Calendar dimension to be able to query/aggregate easily blocks of time.
+* Time dimension will be replicated in all clusters
 
-# Analytical Queries
-Some of the questions we can now answer with our star schema model are included as examples within the [test.ipynb](https://github.com/joseph-higaki/UDataEng_L02P01_create-song-play-schema/blob/main/test.ipynb) 
-
-![image](https://user-images.githubusercontent.com/11904085/153720710-153f60b9-bd39-464d-a889-8cdebb62fc0b.png)
-
-![image](https://user-images.githubusercontent.com/11904085/153720725-b3b3562d-8294-4371-8780-93577a4ef1b3.png)
-
-![image](https://user-images.githubusercontent.com/11904085/153720738-5c5dca09-6cfe-4986-a669-f06781955fc2.png)
+![image](https://user-images.githubusercontent.com/11904085/166487515-60bd940a-eb28-4d99-84d3-9a8b27d377b7.png) 
