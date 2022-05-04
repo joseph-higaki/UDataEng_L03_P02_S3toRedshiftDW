@@ -137,8 +137,9 @@ create table if not exists time
   week int not null,
   month int not null,
   year int not null,
-  day_name varchar not null,
-  weekday bool not null
+  day_of_week int not null,
+  day_of_week_name varchar not null,
+  is_weekend bool not null
 ) diststyle ALL;
 """)
 
