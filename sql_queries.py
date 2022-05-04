@@ -144,6 +144,7 @@ staging_events_copy = (f"""
 copy staging_events 
 from '{config['S3']['LOG_DATA']}' 
 iam_role '{config['IAM_ROLE']['ARN']}'
+region '{config['S3']['BUCKET_REGION']}'
 json '{config['S3']['LOG_JSONPATH']}';
 """)
 
@@ -151,6 +152,7 @@ staging_songs_copy = (f"""
 copy staging_songs 
 from '{config['S3']['SONG_DATA']}' 
 iam_role '{config['IAM_ROLE']['ARN']}'
+region '{config['S3']['BUCKET_REGION']}'
 json 'auto ignorecase';
 """)
 
