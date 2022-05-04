@@ -6,7 +6,6 @@ config = configparser.ConfigParser()
 config.read('dwh.cfg')
 
 # DROP TABLES
-
 staging_events_table_drop = "DROP TABLE IF EXISTS staging_events;"
 staging_songs_table_drop = "DROP TABLE IF EXISTS staging_events;"
 songplay_table_drop = "drop table if exists songplays;"
@@ -14,6 +13,11 @@ user_table_drop = "drop table if exists users;"
 song_table_drop = "drop table if exists songplays;"
 artist_table_drop = "drop table if exists artists;"
 time_table_drop = "drop table if exists time;"
+
+# STAGING TABLES
+# Will have string fields only to have the raw data captured in from the source. 
+# Any data formatting, data conversion, deduplication or filtering is done when loading
+# the data from staging to the datawarehouse tables
 
 # CREATE TABLES
 # For staging events, 

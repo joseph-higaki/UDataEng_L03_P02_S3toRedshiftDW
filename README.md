@@ -76,7 +76,9 @@ DDL and DML SQL statements for the ETL
 ## [test.ipynb](https://github.com/joseph-higaki/UDataEng_L03_P02_S3toRedshiftDW/blob/main/test.ipynb)
 Notebook querying the data inserted by the ETL
 
-# Database Schema 
+# Database Schema - Staging
+Staging tables will have string fields only to have the raw data captured in from the source. 
+Any data formatting, data conversion, deduplication or filtering is done when loading the data from staging to the datawarehouse tables
 
 ## Staging Table `staging_events`
 * For staging events, there is character content larger at staging_events.artist than the default varchar default length (256)
@@ -88,6 +90,7 @@ Notebook querying the data inserted by the ETL
 
 ![image](https://user-images.githubusercontent.com/11904085/166484126-8e915a5f-4dd3-4168-89e5-e69c667d17ab.png)
 
+# Database Schema - Datawarehouse 
 
 ## Fact Table `songplays`
 * PK `songplay_id` has an autoincrement int column 
