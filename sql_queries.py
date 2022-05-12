@@ -5,16 +5,25 @@ import configparser
 config = configparser.ConfigParser()
 config.read('dwh.cfg')
 
-# DROP TABLES
+# DROP TABLES RAW STAGING TABLES
 staging_events_table_drop = "DROP TABLE IF EXISTS staging_events;"
 staging_songs_table_drop = "DROP TABLE IF EXISTS staging_events;"
+
+# DROP TABLES INTERMEDIATE STAGING TABLES
+staging_artist_row_table_drop = "DROP TABLE IF EXISTS staging_artist_row;"
+staging_artist_id_name_table_drop = "DROP TABLE IF EXISTS staging_artist_id_name;"
+staging_artist_names_table_drop = "DROP TABLE IF EXISTS staging_artist_names;"
+
+# DROP TABLES DWH TABLES
 songplay_table_drop = "drop table if exists songplays;"
+artist_names_table_drop = "drop table if exists artist_names;"
 user_table_drop = "drop table if exists users;"
 song_table_drop = "drop table if exists songplays;"
-artist_table_drop = "drop table if exists artists;"
 time_table_drop = "drop table if exists time;"
 
-# STAGING TABLES
+# ********************************************************************
+# ************************ RAW STAGING TABLES ************************
+# ********************************************************************
 # Will have string fields only to have the raw data captured in from the source. 
 # Any data formatting, data conversion, deduplication or filtering is done when loading
 # the data from staging to the datawarehouse tables
@@ -66,6 +75,56 @@ CREATE TABLE if not exists staging_songs
 );
 """)
 
+# *************************************-***************************************
+# ************************ INTERMEDIATE STAGING TABLES ************************
+# *****************************************************************************
+
+# Represents a row from the songs dataset representing an artist
+staging_artist_row_table_create = ("""
+CREATE TABLE staging_artist_row 
+(   
+  artist_id varchar,
+  artist_name varchar(1000),
+  artist_latitude decimal,  
+  artist_latitude_score int,
+  artist_longitude decimal,
+  artist_longitude_score int,
+  artist_lat_long_score int,
+  artist_location  varchar(1000),
+  artist_location_score int
+);
+""")
+
+# Represents an ID / Name combination
+staging_artist_id_name_table_create = ("""
+CREATE TABLE staging_artist_id_name 
+(   
+  artist_id varchar,
+  artist_name varchar(1000),
+  multiple_name_indicator int,
+  multiple_id_indicator int  
+);
+""")
+
+# Working table that will become Artist Name dimension
+staging_artist_names_table_create = ("""
+CREATE TABLE staging_artist_names 
+(   
+  original_artist_id varchar,
+  artist_name varchar(1000),
+  recalculated_artist_id varchar,
+  artist_latitude decimal,  
+  artist_longitude decimal,
+  artist_location  varchar(1000),
+  multiple_name_indicator int,
+  multiple_id_indicator int,
+  step int
+);
+""")
+
+# ***********************************************************
+# ************************ DW TABLES ************************
+# ***********************************************************
 # Songplays fact table will have a distribution style by Key
 # Having its sort key the timestamp
 # The distribution key will be the song id, which corresponds to the largest dimension
@@ -115,15 +174,15 @@ create table if not exists songs
 ) diststyle KEY;
 """)
 
-# Artists dimension will be replicated in all clusters
-artist_table_create = ("""
-create table if not exists artists
+# Artist Names dimension will be replicated in all clusters
+artist_names_table_create = ("""
+create table if not exists artist_names
 (
-    artist_id varchar not null primary key,
-    name varchar(1000) not null sortkey,
-    location varchar(1000) null,
+    name varchar(1000) not null primary key sortkey,
+    artist_id varchar not null,        
     latitude decimal null,
-    longitude decimal null
+    longitude decimal null,
+    location varchar(1000) null
 ) diststyle ALL;
 """)
 
@@ -143,7 +202,7 @@ create table if not exists time
 ) diststyle ALL;
 """)
 
-# STAGING TABLES
+# LOADING STAGING TABLES
 
 staging_events_copy = (f"""
 copy staging_events 
@@ -161,7 +220,356 @@ region '{config['S3']['BUCKET_REGION']}'
 json 'auto ignorecase';
 """)
 
-# FINAL TABLES
+# LOADING INTERMEDIATE STAGING TABLES
+staging_artist_row_insert = ("""
+insert into staging_artist_row (
+    artist_id, 
+    artist_name, 
+    artist_latitude,
+    artist_latitude_score,
+    artist_longitude, 
+    artist_longitude_score,
+    artist_lat_long_score,
+    artist_location,
+    artist_location_score
+)
+select distinct
+artist_id,
+artist_name as name,
+artist_latitude::decimal as artist_latitude,
+case when artist_latitude ~ '^(([-+]?[0-9]+(\.[0-9]+)?)|([-+]?\.[0-9]+))$' then 1 else 0 end as artist_latitude_score,
+artist_longitude::decimal as artist_longitude,
+case when artist_longitude ~ '^(([-+]?[0-9]+(\.[0-9]+)?)|([-+]?\.[0-9]+))$' then 1 else 0 end as artist_longitude_score,
+artist_latitude_score + artist_longitude_score as artist_lat_long_score, 
+artist_location as artist_location,
+case when not trim(artist_location) = '' then 1 else 0 end as artist_location_score
+from staging_songs;
+""")
+
+staging_artist_id_name_insert = ("""
+insert into staging_artist_id_name 
+( artist_id, artist_name, multiple_name_indicator, multiple_id_indicator)
+with artists as (
+        select distinct 
+        artist_id,
+        artist_name
+        from staging_artist_row 
+    ),
+artists_multiple_names as (    
+    select 
+        artist_id,
+        count(1) as artist_name_count
+    from artists
+    group by artist_id
+    having count(1) > 1
+),
+artists_multiple_ids as (
+    select 
+        artist_name,
+        count(1) as artist_id_count
+    from artists
+    group by artist_name
+    having count(1) > 1
+)
+select 
+a.artist_id,
+a.artist_name,
+case when exists (select 1 from artists_multiple_names b where b.artist_id = a.artist_id) then 1 else 0 end  as multiple_name_indicator,
+case when exists (select 1 from artists_multiple_ids c where c.artist_name = a.artist_name) then 1 else 0 end as multiple_id_indicator
+from artists a;
+""")
+
+staging_artist_names_insert_01 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+select distinct
+    a.artist_id,
+    a.artist_name,
+    a.artist_id as recalculated_artist_id,
+    first_value(ar.artist_latitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_latitude,
+    first_value(ar.artist_longitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_longitude,
+    first_value(ar.artist_location) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_location_score desc
+        rows unbounded preceding
+    ) as artist_location,
+    a.multiple_name_indicator,
+    a.multiple_id_indicator,
+    1 as step
+from staging_artist_id_name a 
+left join staging_artist_row ar on 
+    a.artist_id = ar.artist_id 
+    and a.artist_name = ar.artist_name
+where a.multiple_id_indicator = 0 
+and a.multiple_name_indicator = 0;
+""")
+
+staging_artist_names_insert_02 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+select
+    distinct
+    a.artist_id,
+    a.artist_name,    
+    coalesce(
+        first_value(an.recalculated_artist_id) over (
+            partition by a.artist_id, a.artist_name 
+            order by an.recalculated_artist_id desc nulls last 
+            rows unbounded preceding
+        )
+        , a.artist_id
+    ) as recalculated_artist_id,
+    first_value(ar.artist_latitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_latitude,    
+    first_value(ar.artist_longitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as new_artist_longitude,    
+    first_value(ar.artist_location) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_location_score desc
+        rows unbounded preceding
+    ) as artist_location,
+    a.multiple_name_indicator,
+    a.multiple_id_indicator,
+    2 as step
+from staging_artist_id_name a 
+left join staging_artist_row ar on
+    a.artist_id = ar.artist_id 
+    and a.artist_name = ar.artist_name
+left join staging_artist_names an on
+    a.artist_name = an.artist_name
+where 1=1
+and  a.multiple_id_indicator = 0
+and a.multiple_name_indicator = 1;
+""")
+
+staging_artist_names_insert_03 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+select
+    distinct
+    a.artist_id,
+    a.artist_name,
+    coalesce(
+        first_value(an.recalculated_artist_id) over (
+            partition by a.artist_id, a.artist_name 
+            order by an.recalculated_artist_id desc nulls last 
+            rows unbounded preceding
+        )
+        , a.artist_id
+    ) as recalculated_artist_id,
+    first_value(ar.artist_latitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_latitude,    
+    first_value(ar.artist_longitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as new_artist_longitude,    
+    first_value(ar.artist_location) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_location_score desc
+        rows unbounded preceding
+    ) as artist_location,
+    a.multiple_name_indicator,
+    a.multiple_id_indicator,
+    3 as step
+from staging_artist_id_name a 
+left join staging_artist_row ar on
+    a.artist_id = ar.artist_id 
+    and a.artist_name = ar.artist_name
+left join staging_artist_names an on
+    a.artist_name = an.artist_name
+where 1=1
+and  a.multiple_id_indicator = 1
+and a.multiple_name_indicator = 0;
+""")
+
+staging_artist_names_insert_04 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+select
+    distinct
+    a.artist_id,
+    a.artist_name,
+    coalesce(
+        first_value(an.recalculated_artist_id) over (
+            partition by a.artist_id, a.artist_name 
+            order by an.recalculated_artist_id desc nulls last 
+            rows unbounded preceding
+        )
+        , a.artist_id
+    ) as recalculated_artist_id,
+    first_value(ar.artist_latitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_latitude,    
+    first_value(ar.artist_longitude) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as new_artist_longitude,    
+    first_value(ar.artist_location) over (
+        partition by a.artist_id, a.artist_name order by ar.artist_location_score desc
+        rows unbounded preceding
+    ) as artist_location,
+    a.multiple_name_indicator,
+    a.multiple_id_indicator,
+    4 as step
+from staging_artist_id_name a 
+left join staging_artist_row ar on
+    a.artist_id = ar.artist_id 
+    and a.artist_name = ar.artist_name
+left join staging_artist_names an on
+    a.artist_name = an.artist_name
+where 1=1
+and  a.multiple_id_indicator = 1
+and a.multiple_name_indicator = 1;
+""")
+
+staging_artist_names_insert_05 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+select    
+    an.original_artist_id,
+    an.artist_name,    
+    first_value(an.recalculated_artist_id) over (
+        partition by an.artist_name 
+        order by an.recalculated_artist_id desc nulls last 
+        rows unbounded preceding
+    ) as recalculated_artist_id,
+    an.artist_latitude,    
+    an.artist_longitude,    
+    an.artist_location,
+    cast( null as int) as multiple_name_indicator,
+    cast( null as int) as multiple_id_indicator,
+    5 as step
+from staging_artist_names an 
+where step in (1,2,3,4);
+""")
+
+staging_artist_names_insert_06 = ("""
+insert into staging_artist_names (
+    original_artist_id,
+    artist_name,
+    recalculated_artist_id,
+    artist_latitude,  
+    artist_longitude,
+    artist_location,
+    multiple_name_indicator,
+    multiple_id_indicator,
+    step
+)
+with staging_artist_names_5 as (
+    select
+    an.original_artist_id,
+    an.artist_name,
+    an.recalculated_artist_id,
+    an.artist_latitude,
+    case when an.artist_latitude is not null then 1 else 0 end as artist_latitude_score,
+    an.artist_longitude,    
+    case when an.artist_longitude is not null then 1 else 0 end as artist_longitude_score,
+    artist_latitude_score + artist_longitude_score as artist_lat_long_score,
+    an.artist_location,
+    case when not trim(an.artist_location) = '' then 1 else 0 end as artist_location_score,
+    an.multiple_name_indicator,
+    an.multiple_id_indicator
+    from staging_artist_names an
+    where step = 5
+)
+select    
+    an5.original_artist_id,
+    an5.artist_name,
+    an5.recalculated_artist_id,
+    first_value(an5.artist_latitude) over (
+        partition by an5.recalculated_artist_id order by an5.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_latitude,    
+    first_value(an5.artist_longitude) over (
+        partition by an5.recalculated_artist_id order by an5.artist_lat_long_score desc
+        rows unbounded preceding
+    ) as artist_longitude,    
+    first_value(an5.artist_location) over (
+        partition by an5.recalculated_artist_id order by an5.artist_location_score desc
+        rows unbounded preceding
+    ) as artist_location,
+    an5.multiple_name_indicator,
+    an5.multiple_id_indicator,
+    6 as step
+from staging_artist_names_5 an5;
+""")
+
+# FINAL DWH TABLES
+
+# Load Artist names dimension based on the last step of the staging table
+artist_table_insert = ("""
+insert into artist_names (
+    name,
+    artist_id,
+    latitude,  
+    longitude,
+    location
+)
+select distinct
+an.artist_name,
+an.recalculated_artist_id,
+an.artist_latitude,
+an.artist_longitude,    
+an.artist_location    
+from staging_artist_names an
+where step = 6;
+""")
+
 # Load first the song and artist tables 
 # We will use them to load song and artist id
 # into the songplay fact table
@@ -174,18 +582,6 @@ title,
 artist_id,
 year::int,
 duration
-from staging_songs;
-""")
-
-artist_table_insert = ("""
-insert into artists
-(artist_id, name, location, latitude, longitude)
-select 
-artist_id,
-artist_name as name,
-artist_location as location,
-artist_latitude::decimal as latitude,
-artist_longitude::decimal as longitude
 from staging_songs;
 """)
 
@@ -243,8 +639,51 @@ where page = 'NextSong'
 
 # QUERY LISTS
 
-create_table_queries = [staging_events_table_create, staging_songs_table_create, songplay_table_create, user_table_create, song_table_create, artist_table_create, time_table_create]
-drop_table_queries = [staging_events_table_drop, staging_songs_table_drop, songplay_table_drop, user_table_drop, song_table_drop, artist_table_drop, time_table_drop]
+create_table_queries = [
+    # RAW STAGING TABLES
+    staging_events_table_create,
+    staging_songs_table_create,
+    # INTERMEDIATE STAGING TABLES
+    staging_artist_row_table_create,
+    staging_artist_id_name_table_create,
+    staging_artist_names_table_create, 
+    # DWH TABLES
+    artist_names_table_create,
+    songplay_table_create,
+    user_table_create,
+    song_table_create,    
+    time_table_create]
+
+drop_table_queries = [
+    # RAW STAGING TABLES
+    staging_events_table_drop, 
+    staging_songs_table_drop,
+    staging_artist_row_table_drop,
+    staging_artist_id_name_table_drop,
+    staging_artist_names_table_drop,
+    artist_names_table_drop, 
+    songplay_table_drop,
+    user_table_drop,
+    song_table_drop,    
+    time_table_drop]
+
+# RAW STAGING TABLES
 copy_table_queries = [staging_events_copy, staging_songs_copy]
+
 # Load first song and artist
-insert_table_queries = [song_table_insert, artist_table_insert, songplay_table_insert, user_table_insert, time_table_insert]
+insert_table_queries = [
+    # INTERMEDIATE STAGING TABLES
+    staging_artist_row_insert,    
+    staging_artist_id_name_insert,
+    staging_artist_names_insert_01,
+    staging_artist_names_insert_02,
+    staging_artist_names_insert_03,
+    staging_artist_names_insert_04,
+    staging_artist_names_insert_05,
+    staging_artist_names_insert_06,
+    # DWH TABLES
+    artist_table_insert,
+    song_table_insert,
+    songplay_table_insert,
+    user_table_insert,
+    time_table_insert]
