@@ -15,10 +15,11 @@ staging_artist_id_name_table_drop = "DROP TABLE IF EXISTS staging_artist_id_name
 staging_artist_names_table_drop = "DROP TABLE IF EXISTS staging_artist_names;"
 
 # DROP TABLES DWH TABLES
-songplay_table_drop = "drop table if exists songplays;"
+
 artist_names_table_drop = "drop table if exists artist_names;"
+song_titles_table_drop = "drop table if exists song_titles;"
+songplay_table_drop = "drop table if exists songplays;"
 user_table_drop = "drop table if exists users;"
-song_table_drop = "drop table if exists songplays;"
 time_table_drop = "drop table if exists time;"
 
 # ********************************************************************
@@ -129,6 +130,39 @@ CREATE TABLE staging_artist_names
 # Having its sort key the timestamp
 # The distribution key will be the song id, which corresponds to the largest dimension
 # This way songplays along with songs are allocated in the same cluster
+
+
+
+# Artist Names dimension will be replicated in all clusters
+artist_names_table_create = ("""
+create table if not exists artist_names
+(
+    name varchar(1000) not null primary key sortkey,
+    artist_id varchar not null,        
+    latitude decimal null,
+    longitude decimal null,
+    location varchar(1000) null
+) diststyle ALL;
+""")
+
+# Songs dimension is the largest dimension
+# It has a distribution style by title
+# so it can distribute across clusters along with the songplays fact table records
+song_titles_table_create = ("""
+create table if not exists song_titles
+(    
+    artist_name varchar(1000) not null,
+    title varchar(1000) not null,    
+    year int not null,
+    duration decimal not null,
+    primary key (artist_name, title)    
+) 
+diststyle KEY
+distkey (title)
+sortkey (artist_name, title)
+;
+""")
+
 songplay_table_create = ("""
 create table if not exists songplays
 (
@@ -157,32 +191,6 @@ create table if not exists users
     last_name varchar not null,
     gender varchar not null,
     level varchar not null
-) diststyle ALL;
-""")
-
-# Songs dimension is the largest dimension
-# It has a distribution style by song_id 
-# so it can distribute across clusters along with the songplays fact table records
-song_table_create = ("""
-create table if not exists songs
-(
-    song_id varchar not null primary key distkey,
-    title varchar(1000) not null sortkey,
-    artist_id varchar not null,
-    year int not null,
-    duration decimal not null
-) diststyle KEY;
-""")
-
-# Artist Names dimension will be replicated in all clusters
-artist_names_table_create = ("""
-create table if not exists artist_names
-(
-    name varchar(1000) not null primary key sortkey,
-    artist_id varchar not null,        
-    latitude decimal null,
-    longitude decimal null,
-    location varchar(1000) null
 ) diststyle ALL;
 """)
 
@@ -570,19 +578,17 @@ from staging_artist_names an
 where step = 6;
 """)
 
-# Load first the song and artist tables 
-# We will use them to load song and artist id
-# into the songplay fact table
-song_table_insert = ("""
-insert into songs
-(song_id,title,artist_id,year,duration)
-select 
-song_id,
-title,
-artist_id,
-year::int,
-duration
-from staging_songs;
+# Load song title  tables 
+song_titles_table_insert = ("""
+insert into song_titles
+(artist_name, title, year, duration)
+select     
+    s.artist_name,
+    s.title,    
+    max(s.year)::int as year,
+    max(s.duration)::decimal as duration
+from staging_songs s
+group by s.artist_name, s.title;
 """)
 
 songplay_table_insert = ("""
