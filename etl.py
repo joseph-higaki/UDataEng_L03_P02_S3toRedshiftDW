@@ -14,7 +14,7 @@ def main():
     cur = conn.cursor()
     try:
         # Load Raw Staging Tables
-        #execute_query_list(cur, conn, sql_queries.copy_table_queries)
+        execute_query_list(cur, conn, sql_queries.copy_table_queries)
 
         # Load Intermediate Staging Tables
         execute_query_list(cur, conn, sql_queries.insert_intermediate_staging_table_queries)

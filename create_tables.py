@@ -15,7 +15,7 @@ def main():
         #Create Raw Staging Tables
         # Comment this line if COPY from S3 to Redshift is not needed
         # sql_queries.execute_commit_query_list(cur, conn, sql_queries.drop_raw_staging_table_queries)
-        #execute_query_list(cur, conn, [*sql_queries.drop_raw_staging_table_queries, *sql_queries.create_raw_staging_table_queries])
+        execute_query_list(cur, conn, [*sql_queries.drop_raw_staging_table_queries, *sql_queries.create_raw_staging_table_queries])
 
         #Create Intermediate Staging Tables
         execute_query_list(cur, conn, [*sql_queries.drop_intermediate_staging_table_queries, *sql_queries.create_intermediate_staging_table_queries])
