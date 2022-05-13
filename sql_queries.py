@@ -198,7 +198,8 @@ create table if not exists users
 time_table_create = ("""
 create table if not exists time
 (
-  start_time timestamp without time zone not null primary key sortkey,
+  time_key int not null primary key sortkey,
+  timestamp_date timestamp without time zone not null,
   hour int not null,
   day int not null,
   week int not null,
@@ -640,18 +641,34 @@ where rank = 1
 
 time_table_insert = ("""
 insert into time 
-(start_time, hour, day, week, month, year, day_name, weekday)
-select distinct
-    TIMESTAMP 'epoch' + (e.ts/1000) * INTERVAL '1 Second ' as start_time,
+(time_key, timestamp_date, year, month, day, hour, week, day_of_week, day_of_week_name, is_weekend)
+with time_relevant_records as (
+    select TIMESTAMP 'epoch' + (ts/1000) * INTERVAL '1 Second ' as start_time,    
     extract(hour from start_time) as hour,
     extract(day from start_time) as day,
     extract(week from start_time) as week,
     extract(month from start_time) as month,
-    extract(year from start_time) as year, 
-    to_char(start_time, 'Day') as day_name,
-    extract(dayofweek from start_time) in (0,6) as weekday
-from staging_events e
-where page = 'NextSong'
+    extract(year from start_time) as year,
+    TO_TIMESTAMP(year || '-' || month || '-' || day || ' ' || hour || ':00:00', 'YYYY-MM-DD HH24:MI:SS') as timestamp_date
+    from staging_events 
+    where page = 'NextSong'
+)
+select distinct
+    year * 1000000
+    + month * 10000
+    + day * 100
+    + hour 
+    as time_key,
+    timestamp_date,    
+    extract(year from start_time) as year,
+    extract(month from start_time) as month,
+    extract(day from start_time) as day,
+    extract(hour from start_time) as hour,    
+    extract(week from start_time) as week,    
+    extract(dayofweek from start_time) as day_of_week,
+    to_char(start_time, 'Day') as day_of_week_name,
+    day_of_week in (0,6) as is_weekend
+from time_relevant_records
 """)
 
 # QUERY LISTS
