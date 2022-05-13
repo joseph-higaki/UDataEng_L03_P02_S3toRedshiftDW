@@ -18,21 +18,22 @@ staging_artist_names_table_drop = "DROP TABLE IF EXISTS staging_artist_names;"
 
 artist_names_table_drop = "drop table if exists artist_names;"
 song_titles_table_drop = "drop table if exists song_titles;"
-songplay_table_drop = "drop table if exists songplays;"
 user_table_drop = "drop table if exists users;"
 time_table_drop = "drop table if exists time;"
+songplay_table_drop = "drop table if exists songplays;"
 
 # ********************************************************************
 # ************************ RAW STAGING TABLES ************************
 # ********************************************************************
 # Will have string fields only to have the raw data captured in from the source. 
 # Any data formatting, data conversion, deduplication or filtering is done when loading
-# the data from staging to the datawarehouse tables
+# the data from staging to the next stage of transformation
 
 # CREATE TABLES
 # For staging events, 
 # there is character content larger at staging_events.artist 
 # than the default varchar default length (256)
+# Will have string fields only to have the raw data captured in from the source. 
 staging_events_table_create= ("""
 CREATE TABLE if not exists staging_events 
 (
@@ -60,6 +61,7 @@ CREATE TABLE if not exists staging_events
 # For staging songs, 
 # there is character content larger at staging_songs.title, staging_songs.artist_name and staging_songs.artist_location
 # than the default varchar default length (256)
+# Will have string fields only to have the raw data captured in from the source. 
 staging_songs_table_create = ("""
 CREATE TABLE if not exists staging_songs 
 (
@@ -86,9 +88,9 @@ CREATE TABLE staging_artist_row
 (   
   artist_id varchar,
   artist_name varchar(1000),
-  artist_latitude decimal,  
+  artist_latitude decimal(10,8),  
   artist_latitude_score int,
-  artist_longitude decimal,
+  artist_longitude  decimal(11,8),
   artist_longitude_score int,
   artist_lat_long_score int,
   artist_location  varchar(1000),
@@ -114,8 +116,8 @@ CREATE TABLE staging_artist_names
   original_artist_id varchar,
   artist_name varchar(1000),
   recalculated_artist_id varchar,
-  artist_latitude decimal,  
-  artist_longitude decimal,
+  artist_latitude decimal(10,8),  
+  artist_longitude  decimal(11,8),
   artist_location  varchar(1000),
   multiple_name_indicator int,
   multiple_id_indicator int,
@@ -139,8 +141,8 @@ create table if not exists artist_names
 (
     name varchar(1000) not null primary key sortkey,
     artist_id varchar not null,        
-    latitude decimal null,
-    longitude decimal null,
+    latitude decimal(10,8) null,
+    longitude  decimal(11,8) null,
     location varchar(1000) null
 ) diststyle ALL;
 """)
@@ -154,31 +156,13 @@ create table if not exists song_titles
     artist_name varchar(1000) not null,
     title varchar(1000) not null,    
     year int not null,
-    duration decimal not null,
+    duration decimal(19,4) not null,
     primary key (artist_name, title)    
 ) 
 diststyle KEY
 distkey (title)
 sortkey (artist_name, title)
 ;
-""")
-
-songplay_table_create = ("""
-create table if not exists songplays
-(
-    songplay_id int IDENTITY(0,1) primary key,
-    start_time timestamp without time zone not null sortkey,
-    user_id int not null,
-    level varchar not null,
-    song_id varchar distkey,
-    song_title varchar(1000) not null,
-    artist_id varchar,
-    artist_name varchar(1000) not null,
-    session_id int  not null,
-    location varchar(1000) not null,
-    user_agent varchar  not null,
-    stream_duration decimal 
-) diststyle KEY;
 """)
 
 # User dimension table will be replicated in all clusters
@@ -209,6 +193,23 @@ create table if not exists time
   day_of_week_name varchar not null,
   is_weekend bool not null
 ) diststyle ALL;
+""")
+
+songplay_table_create = ("""
+create table if not exists songplays
+(
+    songplay_id int IDENTITY(0,1) primary key,
+    start_time timestamp without time zone not null,
+    start_time_key int not null sortkey,
+    user_id int not null,
+    level varchar not null,    
+    song_title varchar(1000) not null distkey,    
+    artist_name varchar(1000) not null,
+    session_id int  not null,
+    location varchar(1000) not null,
+    user_agent varchar not null,
+    stream_duration decimal(19,4) 
+) diststyle KEY;
 """)
 
 # LOADING STAGING TABLES
@@ -245,9 +246,9 @@ insert into staging_artist_row (
 select distinct
 artist_id,
 artist_name as name,
-artist_latitude::decimal as artist_latitude,
+artist_latitude::decimal(10,8) as artist_latitude,
 case when artist_latitude ~ '^(([-+]?[0-9]+(\.[0-9]+)?)|([-+]?\.[0-9]+))$' then 1 else 0 end as artist_latitude_score,
-artist_longitude::decimal as artist_longitude,
+artist_longitude::decimal(11,8) as artist_longitude,
 case when artist_longitude ~ '^(([-+]?[0-9]+(\.[0-9]+)?)|([-+]?\.[0-9]+))$' then 1 else 0 end as artist_longitude_score,
 artist_latitude_score + artist_longitude_score as artist_lat_long_score, 
 artist_location as artist_location,
@@ -579,7 +580,8 @@ from staging_artist_names an
 where step = 6;
 """)
 
-# Load song title  tables 
+# Load song title table dimension
+# keep 1 record per artist_name and title 
 song_titles_table_insert = ("""
 insert into song_titles
 (artist_name, title, year, duration)
@@ -587,34 +589,13 @@ select
     s.artist_name,
     s.title,    
     max(s.year)::int as year,
-    max(s.duration)::decimal as duration
+    max(s.duration)::decimal(19,4) as duration
 from staging_songs s
 group by s.artist_name, s.title;
 """)
 
-songplay_table_insert = ("""
-insert into songplays
-(start_time, user_id, level, song_id, song_title, 
-artist_id, artist_name, session_id, location, user_agent, stream_duration)
-select 
-    TIMESTAMP 'epoch' + (e.ts/1000) * INTERVAL '1 Second ' as start_time,
-    e.userid::int as user_id,
-    e.level,
-    s.song_id,
-    e.song as song_title,
-    s.artist_id,
-    e.artist as artist_name,
-    e.sessionid::int as session_id,
-    e.location,
-    e.userAgent as user_agent,
-    e.length::decimal as stream_duration
-from staging_events e
-left join staging_songs s on 
-    e.song = s.title 
-    and e.artist = s.artist_name
-where page = 'NextSong'
-""")
-
+# Load users table dimension
+# keep 1 record per user from the latest event 
 user_table_insert = ("""
 insert into users
 (user_id, first_name, last_name, gender, level)
@@ -639,6 +620,8 @@ from latest_user_stream_event
 where rank = 1
 """)
 
+# Load time table dimension
+# keep 1 record per year / month / day / hour 
 time_table_insert = ("""
 insert into time 
 (time_key, timestamp_date, year, month, day, hour, week, day_of_week, day_of_week_name, is_weekend)
@@ -669,6 +652,56 @@ select distinct
     to_char(start_time, 'Day') as day_of_week_name,
     day_of_week in (0,6) as is_weekend
 from time_relevant_records
+""")
+
+# Load songplay fact table 
+# calculate a  timekey year / month / day / hour  to join to the dimension table
+songplay_table_insert = ("""
+insert into songplays (    
+    start_time,
+    start_time_key,
+    user_id,
+    level,
+    song_title,
+    artist_name,
+    session_id,
+    location,
+    user_agent,
+    stream_duration 
+)
+with stream_relevant_records as (
+    select TIMESTAMP 'epoch' + (ts/1000) * INTERVAL '1 Second ' as start_time,    
+    extract(hour from start_time) as hour,
+    extract(day from start_time) as day,    
+    extract(month from start_time) as month,
+    extract(year from start_time) as year,    
+    year * 1000000
+    + month * 10000
+    + day * 100
+    + hour as start_time_key,    
+    userId::int,
+    level,
+    song,
+    artist,
+    sessionId::int,
+    location,
+    userAgent,
+    length
+    from staging_events 
+    where page = 'NextSong'
+)
+select 
+    start_time,
+    start_time_key,
+    e.userid as user_id,
+    e.level,
+    e.song as song_title,
+    e.artist as artist_name,
+    e.sessionid as session_id,
+    e.location,
+    e.userAgent as user_agent,
+    e.length as stream_duration
+from stream_relevant_records e
 """)
 
 # QUERY LISTS
