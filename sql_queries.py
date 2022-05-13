@@ -617,14 +617,25 @@ where page = 'NextSong'
 user_table_insert = ("""
 insert into users
 (user_id, first_name, last_name, gender, level)
-select distinct
-    userid::int as user_id,
-    firstname as first_name,
-    lastname as last_name,
+with latest_user_stream_event as (
+    select 
+    userId::int,
+    firstName,
+    lastName,
+    gender,
+    level,
+    row_number() over(partition by userId order by ts desc) as rank
+    from staging_events
+    where page = 'NextSong'
+)
+select 
+    userId,
+    firstName,
+    lastName,
     gender,
     level
-from staging_events e
-where page = 'NextSong'
+from latest_user_stream_event
+where rank = 1
 """)
 
 time_table_insert = ("""
@@ -655,10 +666,11 @@ create_table_queries = [
     staging_artist_names_table_create, 
     # DWH TABLES
     artist_names_table_create,
-    songplay_table_create,
-    user_table_create,
-    song_table_create,    
-    time_table_create]
+    song_titles_table_create,
+    user_table_create,        
+    time_table_create,
+    songplay_table_create
+    ]
 
 drop_table_queries = [
     # RAW STAGING TABLES
@@ -668,10 +680,10 @@ drop_table_queries = [
     staging_artist_id_name_table_drop,
     staging_artist_names_table_drop,
     artist_names_table_drop, 
-    songplay_table_drop,
-    user_table_drop,
-    song_table_drop,    
-    time_table_drop]
+    song_titles_table_drop,    
+    user_table_drop,    
+    time_table_drop,
+    songplay_table_drop]
 
 # RAW STAGING TABLES
 copy_table_queries = [staging_events_copy, staging_songs_copy]
@@ -689,7 +701,7 @@ insert_table_queries = [
     staging_artist_names_insert_06,
     # DWH TABLES
     artist_table_insert,
-    song_table_insert,
-    songplay_table_insert,
+    song_titles_table_insert,
     user_table_insert,
-    time_table_insert]
+    time_table_insert,
+    songplay_table_insert]
