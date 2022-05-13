@@ -1,31 +1,28 @@
 import configparser
 import psycopg2
-from sql_queries import copy_table_queries, insert_table_queries
-
-
-def load_staging_tables(cur, conn):
-    for query in copy_table_queries:
-        cur.execute(query)
-        conn.commit()
-
-
-def insert_tables(cur, conn):
-    for query in insert_table_queries:
-        cur.execute(query)
-        conn.commit()
+import sql_queries
+from sql_queries import execute_query_list
 
 
 def main():
+    """Entry point for DML scripts to load data into the database
+    """    
     config = configparser.ConfigParser()
     config.read('dwh.cfg')
 
-    conn = psycopg2.connect("host={} dbname={} user={} password={} port={}".format(*config['CLUSTER'].values()))
+    conn = psycopg2.connect(f"host={config.get('CLUSTER','HOST')} dbname={config.get('CLUSTER','DB_NAME')} user={config.get('CLUSTER','DB_USER')} password={config.get('CLUSTER','DB_PASSWORD')} port={config.get('CLUSTER','DB_PORT')}")
     cur = conn.cursor()
-    
-    load_staging_tables(cur, conn)
-    insert_tables(cur, conn)
+    try:
+        # Load Raw Staging Tables
+        #execute_query_list(cur, conn, sql_queries.copy_table_queries)
 
-    conn.close()
+        # Load Intermediate Staging Tables
+        execute_query_list(cur, conn, sql_queries.insert_intermediate_staging_table_queries)
+
+        # Load DWH Tables
+        execute_query_list(cur, conn, sql_queries.insert_dwh_table_queries)
+    finally:    
+        conn.close()
 
 
 if __name__ == "__main__":

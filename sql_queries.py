@@ -1,5 +1,17 @@
 import configparser
 
+def execute_query_list(cur, conn, queries):
+    """Executes in a transaction the query list
+
+    Args:
+        cur (psycopg2 cursor): Cursor to the database
+        conn (psycopg2 connection): Connection to the database
+        queries (list of strings): SQL queries 
+    """
+    for query in queries:
+        cur.execute(query)
+        conn.commit()
+
 
 # CONFIG
 config = configparser.ConfigParser()
@@ -706,15 +718,17 @@ from stream_relevant_records e
 
 # QUERY LISTS
 
-create_table_queries = [
+create_raw_staging_table_queries = [
     # RAW STAGING TABLES
     staging_events_table_create,
-    staging_songs_table_create,
+    staging_songs_table_create]
+create_intermediate_staging_table_queries = [
     # INTERMEDIATE STAGING TABLES
     staging_artist_row_table_create,
     staging_artist_id_name_table_create,
-    staging_artist_names_table_create, 
+    staging_artist_names_table_create]
     # DWH TABLES
+create_dwh_table_queries = [
     artist_names_table_create,
     song_titles_table_create,
     user_table_create,        
@@ -722,13 +736,17 @@ create_table_queries = [
     songplay_table_create
     ]
 
-drop_table_queries = [
+drop_raw_staging_table_queries = [
     # RAW STAGING TABLES
     staging_events_table_drop, 
-    staging_songs_table_drop,
+    staging_songs_table_drop]
+drop_intermediate_staging_table_queries = [
+    # INTERMEDIATE STAGING TABLES
     staging_artist_row_table_drop,
     staging_artist_id_name_table_drop,
-    staging_artist_names_table_drop,
+    staging_artist_names_table_drop]
+drop_dwh_table_queries = [
+    # DWH TABLES
     artist_names_table_drop, 
     song_titles_table_drop,    
     user_table_drop,    
@@ -739,7 +757,7 @@ drop_table_queries = [
 copy_table_queries = [staging_events_copy, staging_songs_copy]
 
 # Load first song and artist
-insert_table_queries = [
+insert_intermediate_staging_table_queries = [
     # INTERMEDIATE STAGING TABLES
     staging_artist_row_insert,    
     staging_artist_id_name_insert,
@@ -748,7 +766,8 @@ insert_table_queries = [
     staging_artist_names_insert_03,
     staging_artist_names_insert_04,
     staging_artist_names_insert_05,
-    staging_artist_names_insert_06,
+    staging_artist_names_insert_06]
+insert_dwh_table_queries = [
     # DWH TABLES
     artist_table_insert,
     song_titles_table_insert,
